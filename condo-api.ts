@@ -7,13 +7,6 @@ import {Upload} from './upload';
 
 
 export class CondoApi {
-    public uploadId: string;
-
-    private _params: any;
-    private _uploadId: string;
-    private _currentRequests = new Set<any>();
-
-
     // TODO:: we need to have a configurable variable indicate the
     // location of the worker files.
     private static _next: number = -1;
@@ -22,6 +15,13 @@ export class CondoApi {
         new ParallelHasher('/node_modules/ts-md5/dist/md5_worker.js'),
         new ParallelHasher('/node_modules/ts-md5/dist/md5_worker.js')
     ];
+
+    public uploadId: string;
+
+    private _params: any;
+    private _uploadId: string;
+    private _currentRequests = new Set<any>();
+
 
     static nextHasher() {
         this._next += 1;
@@ -73,7 +73,11 @@ export class CondoApi {
         req = self._http.get('#{ self._apiEndpoint }/new', {
             body: JSON.stringify(self._params),
             headers: headers
-        }).map(res => res.json().residence).share();
+        }).map((res) => {
+            // Make sure the API service is running
+            // console.log(res.text());
+            return res.json().residence;
+        }).share();
 
         self._monitorRequest(self, req);
 
@@ -273,7 +277,7 @@ export class CondoApi {
 
     private _monitorRequest(self, req) {
         self._currentRequests.add(req);
-        req.subscribeOnCompleted(() => {
+        req.subscribe(null, null, () => {
             self._currentRequests.delete(req);
         });
     }

@@ -55,6 +55,8 @@ export abstract class CloudStorage {
         if (this._strategy && this.state === State.Uploading) {
             this.state = State.Paused;
             this._api.abort();
+            this._pendingParts = this._getCurrentParts();
+            this._currentParts = [];
         } else if (!this._strategy) {
             // We don't have a strategy yet
             this.state = State.Paused;
@@ -169,6 +171,8 @@ export abstract class CloudStorage {
 // This is used to manage an upload to a Cloud Storage Provider
 // ============================================================
 export class Upload {
+    static provider: any = {};
+
     complete: boolean = false;
     uploading: boolean = false;
     cancelled: boolean = false;
@@ -179,8 +183,6 @@ export class Upload {
 
     // Resolved when the upload completes or is cancelled
     promise: Promise<Upload>;
-
-    static provider: any = {};
 
     private _initialised: boolean = false;
     private _resolve;

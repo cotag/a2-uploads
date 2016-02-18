@@ -29,31 +29,40 @@ export class UploadManager {
         private _apiEndpoint: string,
         dropService: DropService,
         streamName: string,
-        filter?: (files: DropFiles) => any
+        map?: (files: DropFiles) => any
     ) {
         var self: UploadManager = this;
 
         // Remove event and filter for dropped files only
-        self._stream = dropService.getStream(streamName).map((files) => {
-            return files.data;
-        }).filter((files) => {
-            if (files && files.length > 0) {
-                return true;
-            }
-            return false;
+        self._stream = dropService.getStream(streamName).filter((obj) => {
+            // Only available on a drop event
+            return obj.data && obj.data.length > 0;
+        }).flatMap((obj) => {
+            return obj.data.promise;
+        }).map((obj) => {
+            var files = obj.files;
+            files.totalBytes = obj.totalSize;
+
+            // Now we have an array of files
+            return files;
         });
 
         // Add optional user defined filter
-        if (filter) {
-            self._stream = self._stream.filter(filter);
+        if (map) {
+            self._stream = self._stream.map(map);
         }
 
+        // Filter if we now have an empty array (user code might have rejected all the files)
+        self._stream.filter((files) => {
+            return files && files.length > 0;
+        });
+
         // process the incomming files
-        self._stream.subscribe(function(data) {
+        self._stream.subscribe(function(files: Array<any>) {
             var autostart = self.autoStart,
                 completeCallback = self._uploadComplete.bind(self);
 
-            data.files.forEach((file) => {
+            files.forEach((file) => {
                 var upload: Upload = new Upload(self._http, self._apiEndpoint, file, self.retries, self.parallel);
                 self.uploads.push(upload);
 

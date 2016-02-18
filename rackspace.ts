@@ -1,6 +1,4 @@
 
-import {Observable} from 'rxjs/Rx';
-
 import {CondoApi} from './condo-api';
 import {Upload, State, CloudStorage} from './upload';
 
@@ -10,7 +8,7 @@ export class OpenStack extends CloudStorage {
     // 2MB part size
     private _partSize: number = 2097152;
 
-    
+
     constructor(api: CondoApi, upload: Upload) {
         super(api, upload);
     }
@@ -78,20 +76,26 @@ export class OpenStack extends CloudStorage {
         });
     }
 
-    private _resume(response, firstChunk = null) {
+    private _resume(response = null, firstChunk = null) {
         var i:number;
 
-        if (response.type === 'parts') {
-            // The upload has already started and we want to continue where we left off
-            this._pendingParts = <Array<number>>response.part_list;
-            for (i = 0; i < this._upload.parallel; i += 1) {
-                this._nextPart();
+        if (response) {
+            if (response.type === 'parts') {
+                // The upload has already started and we want to continue where we left off
+                this._pendingParts = <Array<number>>response.part_list;
+                for (i = 0; i < this._upload.parallel; i += 1) {
+                    this._nextPart();
+                }
+            } else {
+                this._setPart(response, firstChunk);
+
+                // upload this 
+                for (i = 1; i < this._upload.parallel; i += 1) {
+                    this._nextPart();
+                }
             }
         } else {
-            this._setPart(response, firstChunk);
-
-            // upload this 
-            for (i = 1; i < this._upload.parallel; i += 1) {
+            for (i = 0; i < this._upload.parallel; i += 1) {
                 this._nextPart();
             }
         }
@@ -111,14 +115,14 @@ export class OpenStack extends CloudStorage {
                 self._api.nextChunk(
                     partNum,
                     result.md5,
-                    self._currentParts
+                    self._getCurrentParts()
                 ).subscribe((response) => {
                     self._setPart(response, result);
                 }, self._defaultError.bind(self));
             });
         } else if (self._currentParts.length === 0) {
-            // This is the final part
-            self.sign('finish').subscribe((response) => {
+            // This is the final commit
+            self._api.sign('finish').subscribe((response) => {
                 self._api.signedRequest(response).request
                     .then(() => {
                         self._completeUpload();
@@ -140,7 +144,7 @@ export class OpenStack extends CloudStorage {
     private _direct(request, partInfo) {
         var self = this,
             monitor = self._requestWithProgress(partInfo, request);
-        
+
         monitor.then(() => {
             self._completeUpload();
         }, self._defaultError.bind(self));
