@@ -58,6 +58,7 @@ export class CondoApi {
         var self = this,
             file = self._upload.file,
             headers = new Headers(),
+            search = new URLSearchParams(),
             req;
 
         headers.append('Content-Type', 'application/json');
@@ -65,13 +66,16 @@ export class CondoApi {
         self._params.file_size = file.size;
         self._params.file_name = file.name;
 
-        if (file.dir_path) {
+        if (file.dir_path && file.dir_path.length > 0) {
             self._params.file_path = file.dir_path;
         }
 
+        // Build the search params
+        self._setParams(search, self._params);
+
         // Return the name of the storage provider (google, amazon, rackspace, etc)
-        req = self._http.get('#{ self._apiEndpoint }/new', {
-            body: JSON.stringify(self._params),
+        req = self._http.get(`${ self._apiEndpoint }/new`, {
+            search: search,
             headers: headers
         }).map((res) => {
             // Make sure the API service is running
@@ -137,7 +141,7 @@ export class CondoApi {
         search.set('part', partNum.toString());
         search.set('file_id', partId);
 
-        req = self._http.post('#{ self._apiEndpoint }/#{ encodeURIComponent(self._uploadId) }/next_part',
+        req = self._http.post(`${self._apiEndpoint}/${ encodeURIComponent(self._uploadId) }/edit`,
             JSON.stringify(body),
             {
                 search: search
@@ -161,7 +165,7 @@ export class CondoApi {
             search.set('file_id', part_id);
         }
 
-        req = self._http.get('#{ self._apiEndpoint }/#{ encodeURIComponent(self._uploadId) }/edit', {
+        req = self._http.get(`${ self._apiEndpoint }/${ encodeURIComponent(self._uploadId) }/edit`, {
             search: search
         }).map(res => res.json()).share();
 
@@ -180,7 +184,7 @@ export class CondoApi {
 
         headers.append('Content-Type', 'application/json');
 
-        req = self._http.put('#{ self._apiEndpoint }/#{ encodeURIComponent(self._uploadId) }', JSON.stringify(params), {
+        req = self._http.put(`${self._apiEndpoint}/${encodeURIComponent(self._uploadId)}`, JSON.stringify(params), {
             headers: headers
         }).map(res => res.json()).share();
 
@@ -206,7 +210,7 @@ export class CondoApi {
 
         self.abort();
         if (self._uploadId) {
-            return self._http.delete('#{ self._apiEndpoint }/#{ encodeURIComponent(self._uploadId) }');
+            return self._http.delete(`${ self._apiEndpoint }/${ encodeURIComponent(self._uploadId) }`);
         }
     }
 
@@ -280,5 +284,13 @@ export class CondoApi {
         req.subscribe(null, null, () => {
             self._currentRequests.delete(req);
         });
+    }
+
+    private _setParams(search: URLSearchParams, params: any) {
+        var key: string;
+
+        for (key in params) {
+            search.set(key, params[key]);
+        }
     }
 }
