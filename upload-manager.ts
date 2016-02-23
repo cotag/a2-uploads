@@ -7,7 +7,7 @@ import {DropService} from 'a2-file-drop/dist/drop-service';
 import {DropFiles} from 'a2-file-drop/dist/drop-files';
 
 // Manager imports
-import {Upload} from './upload';
+import {ICloudStorage, Upload} from './upload';
 
 
 export class UploadManager {
@@ -23,6 +23,12 @@ export class UploadManager {
     metadata: any;               // Additional data to be provided with the upload
 
     private _stream: Observable<DropFiles>;
+
+
+    static addProvider(provider: ICloudStorage) {
+        Upload.provider[provider.lookup] = provider;
+    }
+
 
     constructor(
         private _http: Http,
@@ -58,7 +64,7 @@ export class UploadManager {
         });
 
         // process the incomming files
-        self._stream.subscribe(function(files: Array<any>) {
+        self._stream.subscribe(function(files: any) {
             var autostart = self.autoStart,
                 completeCallback = self._uploadComplete.bind(self);
 
@@ -76,7 +82,7 @@ export class UploadManager {
                 if (autostart) {
                     autostart = self._checkAutostart();
                     if (autostart) {
-                        upload.resume();
+                        upload.resume(self.parallel);
                     }
                 }
             });

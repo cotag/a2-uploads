@@ -186,7 +186,12 @@ export class CondoApi {
 
         req = self._http.put(`${self._apiEndpoint}/${encodeURIComponent(self._uploadId)}`, JSON.stringify(params), {
             headers: headers
-        }).map(res => res.json()).share();
+        }).map((res) => {
+            if (res.headers.get('content-length') === '0') {
+                return null;
+            }
+            return res.json();
+        }).share();
 
         self._monitorRequest(self, req);
 
@@ -220,6 +225,7 @@ export class CondoApi {
     signedRequest(opts:any) {
         var self = this,
             promise: any,
+            dispose: () => void,
             observer: any,
             progress = new Observable<{loaded:number, total:number}>((obs) => {
                 observer = obs;
@@ -259,18 +265,20 @@ export class CondoApi {
                 xhr.setRequestHeader(i, opts.signature.headers[i]);
             }
 
-            xhr.send(opts.signature.data || null);
-
-            // Hook up the request monitoring
-            self._currentRequests.add(promise);
-
             // Allow the request to be cancelled (quack!)
-            promise.dispose = function () {
+            dispose = function() {
                 xhr.abort();
-                self._currentRequests.delete(promise);
+                self._currentRequests.delete(this);
                 reject('user aborted');
             };
+
+            xhr.send(opts.data || null);
         });
+
+        promise.dispose = dispose.bind(promise);
+
+        // Hook up the request monitoring
+        self._currentRequests.add(promise);
 
         return {
             request: promise,

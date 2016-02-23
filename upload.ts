@@ -12,11 +12,19 @@ export enum State {
     Aborted
 }
 
+// Must be the same as CloudStorage
+export interface ICloudStorage {
+    new (_api: CondoApi, _upload: Upload, _completeCB: any): CloudStorage;
+    lookup: string;
+}
+
 
 // ============================
 // Storage Provider Abstraction
 // ============================
 export abstract class CloudStorage {
+    static name: string;
+
     state: State = State.Paused;
     size: number;
     progress: number = 0;
@@ -32,16 +40,17 @@ export abstract class CloudStorage {
     protected _currentParts: Array<number> = [];
 
     // Store hashing results in case the user pauses and resumes
-    private _memoization: {};
-    private _lastPart: number = 0;
+    protected _memoization: any = {};
+    private   _lastPart: number = 0;
 
 
-    constructor(protected _api: CondoApi, protected _upload: Upload) {
+    constructor(protected _api: CondoApi, protected _upload: Upload, private _completeCB: any) {
         this._file = this._upload.file;
         this.size = this._file.size;
     }
 
-    start () {
+
+    start() {
         if (this.state < State.Uploading) {
             if (this._finalising) {
                 this._completeUpload();
@@ -117,6 +126,10 @@ export abstract class CloudStorage {
             self.progress = self.size;
             self._finalising = false;
             self.state = State.Completed;
+
+            // Complete the upload
+            self._upload.complete = true;
+            self._completeCB(self._upload);
         }, self._defaultError.bind(self));
     }
 
@@ -147,20 +160,31 @@ export abstract class CloudStorage {
         this._strategy = undefined;
     }
 
-    protected _hashData(id: string, callback) {
+    protected _hashData(id: string, dataCb, hashCb) {
         var self = this,
-            result = self._memoization[id];
+            result = self._memoization[id],
+
+            // We don't want to hold references to the data
+            data = dataCb();
 
         if (result) {
             // return the pre-calculated result if available
             return new Promise((resolve) => {
-                resolve(result);
+                resolve({
+                    data: data,
+                    md5: result.md5,
+                    part: result.part
+                });
             });
         } else {
             // Perform the processing in full and save the result
-            return callback().then((result) => {
+            return hashCb(data).then((result) => {
                 self._memoization[id] = result;
-                return result;
+                return {
+                    data: data,
+                    md5: result.md5,
+                    part: result.part
+                };
             });
         }
     }
@@ -185,8 +209,8 @@ export class Upload {
     promise: Promise<Upload>;
 
     private _initialised: boolean = false;
-    private _resolve;
-    private _reject;
+    private _resolve: any;
+    private _reject: any;
 
     private _api: CondoApi;
     private _provider: CloudStorage;
@@ -201,7 +225,7 @@ export class Upload {
         public parallel: number
     ) {
         var self = this;
-        self.promise = new Promise<any>((resolve, reject) => {
+        self.promise = new Promise((resolve, reject) => {
             self._resolve = resolve;
             self._reject = reject;
         });
@@ -221,11 +245,14 @@ export class Upload {
                 // We need to call new to get details on the upload target
                 self._api = new CondoApi(self._http, self._apiEndpoint, self);
                 self._api.init().subscribe(
-                    residence => self._initialise(residence),
+                    (residence) => {
+                        self._initialise(residence);
+                        self._provider.start();
+                    },
                     err => self._retry(err)
                 );
             } else {
-                self._getNextPart();
+                self._provider.start();
             }
         }
     }
@@ -262,7 +289,7 @@ export class Upload {
         return false;
     }
 
-    humanReadableByteCount(si:boolean) {
+    humanReadableByteCount(si:boolean = false) {
         var unit = si ? 1000.0 : 1024.0,
             bytes = this.file.size;
 
@@ -282,19 +309,12 @@ export class Upload {
             this._provider = new Provider(this._api, this);
             this._initialised = true;
         } else {
-            // TODO:: we need to inform the user that this is not implemented
+            // inform the user that this is not implemented
+            // TODO:: we should probably have an interface for the UI to bind to
+            console.error(`provider, ${residence}, not found`);
         }
     }
 
-    private _getNextPart(isRetry?: boolean) {
-        var self = this;
-
-        if (self.uploading && !self.cancelled) {
-            if (isRetry) {
-                // We'll probably have slightly different behaviour
-            }
-        }
-    }
 
     private _retry(err) {
         var self = this;
@@ -302,8 +322,10 @@ export class Upload {
         console.error(err);
 
         if (self._retries < self.retries) {
+            self._retries += 1;
+
             if (self._initialised) {
-                self._getNextPart(true);
+                self._provider.start();
             } else {
                 self.uploading = false;
                 self.resume();
