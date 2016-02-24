@@ -61,6 +61,7 @@ export class CondoApi {
             search = new URLSearchParams(),
             req;
 
+        headers.append('Accept', 'application/json');
         headers.append('Content-Type', 'application/json');
 
         self._params.file_size = file.size;
@@ -95,6 +96,7 @@ export class CondoApi {
             headers = new Headers(),
             req;
 
+        headers.append('Accept', 'application/json');
         headers.append('Content-Type', 'application/json');
 
         if (options.file_id) {
@@ -129,6 +131,7 @@ export class CondoApi {
     nextChunk(partNum: number, partId: string, parts: Array<number>, partData: any = null) {
         var self = this,
             search = new URLSearchParams(),
+            headers = new Headers(),
             body: any = {
                 part_list: parts
             },
@@ -138,13 +141,18 @@ export class CondoApi {
             body.part_data = partData;
         }
 
-        search.set('part', partNum.toString());
-        search.set('file_id', partId);
+        headers.append('Accept', 'application/json');
+        headers.append('Content-Type', 'application/json');
+        self._setParams(search, {
+            part: partNum,
+            file_id: partId
+        });
 
-        req = self._http.post(`${self._apiEndpoint}/${ encodeURIComponent(self._uploadId) }/edit`,
+        req = self._http.put(`${self._apiEndpoint}/${encodeURIComponent(self._uploadId)}`,
             JSON.stringify(body),
             {
-                search: search
+                search: search,
+                headers: headers
             }
         ).map(res => res.json()).share();
 
@@ -158,11 +166,13 @@ export class CondoApi {
     sign(part_number:any, part_id:string = null) {
         var self = this,
             search = new URLSearchParams(),
+            headers = new Headers(),
             req;
 
+        headers.append('Accept', 'application/json');
         search.set('part', part_number.toString());
         if (part_id) {
-            search.set('file_id', part_id);
+            search.set('file_id', encodeURIComponent(part_id));
         }
 
         req = self._http.get(`${ self._apiEndpoint }/${ encodeURIComponent(self._uploadId) }/edit`, {
@@ -183,11 +193,12 @@ export class CondoApi {
             req;
 
         headers.append('Content-Type', 'application/json');
+        headers.append('Accept', 'application/json');
 
         req = self._http.put(`${self._apiEndpoint}/${encodeURIComponent(self._uploadId)}`, JSON.stringify(params), {
             headers: headers
         }).map((res) => {
-            if (res.headers.get('content-length') === '0') {
+            if (res.headers.get('Content-Length') === '0') {
                 return null;
             }
             return res.json();
@@ -222,28 +233,37 @@ export class CondoApi {
 
     // Executes the signed request against the cloud provider
     // Not very testable however it's the best we can achieve given the tools
-    signedRequest(opts:any) {
+    signedRequest(opts:any, monitor: boolean = false) {
         var self = this,
+            response: any = {},
             promise: any,
-            dispose: () => void,
-            observer: any,
-            progress = new Observable<{loaded:number, total:number}>((obs) => {
-                observer = obs;
-            });
+            dispose: () => void;
 
         promise = new Promise((resolve, reject) => {
             var i: string,
-                xhr = new XMLHttpRequest();
+                xhr = new XMLHttpRequest(),
+                observer;
 
-            xhr.addEventListener('progress', (evt: any) => {
-                observer.next({
-                    loaded: evt.loaded,
-                    total: evt.total
+            if (monitor) {
+                response.progress = new Observable<{ loaded: number, total: number }>((obs) => {
+                    observer = obs;
                 });
-            });
+
+                xhr.addEventListener('progress', (evt: any) => {
+                    observer.next({
+                        loaded: evt.loaded,
+                        total: evt.total
+                    });
+                });
+            }
+
             xhr.addEventListener('load', (evt: any) => {
                 self._currentRequests.delete(promise);
-                resolve(evt.response);
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve(xhr);
+                } else {
+                    reject(`${xhr.status}: ${xhr.statusText}`);
+                }
             });
             xhr.addEventListener('error', evt => {
                 self._currentRequests.delete(promise);
@@ -268,22 +288,19 @@ export class CondoApi {
             // Allow the request to be cancelled (quack!)
             dispose = function() {
                 xhr.abort();
-                self._currentRequests.delete(this);
+                self._currentRequests.delete(promise);
                 reject('user aborted');
             };
 
             xhr.send(opts.data || null);
         });
 
-        promise.dispose = dispose.bind(promise);
-
         // Hook up the request monitoring
+        promise.dispose = dispose;
         self._currentRequests.add(promise);
 
-        return {
-            request: promise,
-            progress: progress
-        };
+        response.request = promise;
+        return response;
     }
 
 
@@ -298,7 +315,7 @@ export class CondoApi {
         var key: string;
 
         for (key in params) {
-            search.set(key, params[key]);
+            search.set(key, encodeURIComponent(params[key]));
         }
     }
 }

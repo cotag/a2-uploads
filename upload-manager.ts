@@ -179,8 +179,8 @@ export class UploadManager {
             }
         }
 
-        if (self.autoStart && self._checkAutostart()) {
-            for (index = 0; index < length; index += 1) {
+        if (self.autoStart && self.uploads.length > 0 && self._checkAutostart()) {
+            for (index = 0; index < self.uploads.length; index += 1) {
                 if (self.uploads[index].isWaiting()) {
                     self.uploads[index].resume(self.parallel);
                     break;

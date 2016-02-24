@@ -129,6 +129,8 @@ export abstract class CloudStorage {
 
             // Complete the upload
             self._upload.complete = true;
+            self._upload.uploading = false;
+            self._upload.cancelled = false;
             self._completeCB(self._upload);
         }, self._defaultError.bind(self));
     }
@@ -144,7 +146,7 @@ export abstract class CloudStorage {
 
         request.data = partInfo.data;
 
-        monitor = self._api.signedRequest(request);
+        monitor = self._api.signedRequest(request, true);
         monitor.progress.subscribe((vals) => {
             // TODO:: progress is incorrect here
             // we need this to be tracked properly
@@ -306,7 +308,7 @@ export class Upload {
         var Provider = Upload.provider[residence];
 
         if (Provider) {
-            this._provider = new Provider(this._api, this);
+            this._provider = new Provider(this._api, this, this._resolve);
             this._initialised = true;
         } else {
             // inform the user that this is not implemented
