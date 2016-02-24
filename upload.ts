@@ -60,7 +60,7 @@ export abstract class CloudStorage {
         }
     }
 
-    pause(reason = null) {
+    pause() {
         if (this._strategy && this.state === State.Uploading) {
             this.state = State.Paused;
             this._api.abort();
@@ -72,9 +72,6 @@ export abstract class CloudStorage {
             this._api.abort();
             this._restart();
         }
-
-        // TODO:: propagate the reason for the pause to the user
-        // only if there is an error
     }
 
     destroy() {
@@ -136,8 +133,8 @@ export abstract class CloudStorage {
     }
 
     protected _defaultError(reason) {
-        // TODO:: we may need to update more state
-        this.pause(reason);
+        this.pause();
+        this._upload.notifyError(reason);
     }
 
     protected _requestWithProgress(partInfo, request) {
@@ -249,9 +246,12 @@ export class Upload {
                 self._api.init().subscribe(
                     (residence) => {
                         self._initialise(residence);
-                        self._provider.start();
+
+                        if (self._initialised) {
+                            self._provider.start();
+                        }
                     },
-                    err => self._retry(err)
+                    err => self.notifyError(err)
                 );
             } else {
                 self._provider.start();
@@ -272,9 +272,9 @@ export class Upload {
         if (!self.complete && !self.cancelled) {
             self.pause();
 
+            // Destroy the upload if it has started
             if (self._initialised) {
-                // TODO:: destroy the upload here
-
+                self._provider.destroy();
                 self._initialised = false;
             }
 
@@ -303,22 +303,7 @@ export class Upload {
         return (bytes / Math.pow(unit, exp)).toFixed(1) + ' ' + pre;
     }
 
-
-    private _initialise(residence: string) {
-        var Provider = Upload.provider[residence];
-
-        if (Provider) {
-            this._provider = new Provider(this._api, this, this._resolve);
-            this._initialised = true;
-        } else {
-            // inform the user that this is not implemented
-            // TODO:: we should probably have an interface for the UI to bind to
-            console.error(`provider, ${residence}, not found`);
-        }
-    }
-
-
-    private _retry(err) {
+    notifyError(err) {
         var self = this;
 
         console.error(err);
@@ -334,6 +319,25 @@ export class Upload {
             }
         } else {
             self.pause();
+            self.error = err;
+        }
+    }
+
+
+    private _initialise(residence: string) {
+        var Provider = Upload.provider[residence];
+
+        if (Provider) {
+            this._provider = new Provider(this._api, this, this._resolve);
+            this._initialised = true;
+        } else {
+            // inform the user that this is not implemented
+            this.error = `provider, ${residence}, not found`;
+            console.error(this.error);
+
+            // The upload cannot be performed
+            this.uploading = false;
+            this.cancel();
         }
     }
 }

@@ -198,10 +198,13 @@ export class CondoApi {
         req = self._http.put(`${self._apiEndpoint}/${encodeURIComponent(self._uploadId)}`, JSON.stringify(params), {
             headers: headers
         }).map((res) => {
-            if (res.headers.get('Content-Length') === '0') {
+            // NOTE:: This used to check content length however
+            // See: https://github.com/angular/angular/pull/7250
+            try {
+                return res.json();
+            } catch (e) {
                 return null;
             }
-            return res.json();
         }).share();
 
         self._monitorRequest(self, req);
