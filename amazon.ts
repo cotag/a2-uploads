@@ -30,7 +30,9 @@ export class Amazon extends CloudStorage {
 
                 // 5GB limit on part sizes
                 if (self._partSize > (5 * 1024 * 1024 * 1024)) {
-                    throw 'file exceeds maximum size';
+                    self._upload.cancel();
+                    self._defaultError('file exceeds maximum size');
+                    return;
                 }
             }
 
@@ -166,7 +168,8 @@ export class Amazon extends CloudStorage {
 
     private _nextPart() {
         var self = this,
-            partNum = self._nextPartNumber();
+            partNum = self._nextPartNumber(),
+            details: any;
 
         if ((partNum - 1) * self._partSize < self.size) {
             self._processPart(partNum).then((result) => {
@@ -175,11 +178,13 @@ export class Amazon extends CloudStorage {
                     return;
                 };
 
+                details = self._getPartData();
+
                 self._api.nextChunk(
                     partNum,
                     window.btoa(CondoApi.hexToBin(result.md5)),
-                    self._getCurrentParts(),
-                    self._memoization
+                    details.part_list,
+                    details.part_data
                 ).subscribe((response) => {
                     self._setPart(response, result);
                 }, self._defaultError.bind(self));
@@ -203,11 +208,9 @@ export class Amazon extends CloudStorage {
             //
             // Also this is only executed towards the end of an upload
             // as no new parts are being requested to update the status
-            self._api.update({
-                part_list: self._getCurrentParts(),
-                part_data: self._memoization,
-                part_update: true
-            });
+            details = self._getPartData();
+            details.part_update = true;
+            self._api.update(details);
         }
     }
 

@@ -80,27 +80,35 @@ export class OpenStack extends CloudStorage {
         });
     }
 
-    private _resume(response = null, firstChunk = null) {
-        var i:number;
+    private _resume(request = null, firstChunk = null) {
+        var i: number,
+            self = this;
 
-        if (response) {
-            if (response.type === 'parts') {
+        if (request) {
+            if (request.type === 'parts') {
                 // The upload has already started and we want to continue where we left off
-                this._pendingParts = <Array<number>>response.part_list;
-                for (i = 0; i < this._upload.parallel; i += 1) {
-                    this._nextPart();
+                self._pendingParts = <Array<number>>request.part_list;
+                if (request.part_data) {
+                    self._memoization = request.part_data;
+                }
+
+                for (i = 0; i < self._upload.parallel; i += 1) {
+                    self._nextPart();
                 }
             } else {
-                this._setPart(response, firstChunk);
+                // We are provided with the first request
+                self._nextPartNumber();
+                self._setPart(request, firstChunk);
 
-                // upload this 
-                for (i = 1; i < this._upload.parallel; i += 1) {
-                    this._nextPart();
+                // Then we want to request any parallel parts
+                for (i = 1; i < self._upload.parallel; i += 1) {
+                    self._nextPart();
                 }
             }
         } else {
-            for (i = 0; i < this._upload.parallel; i += 1) {
-                this._nextPart();
+            // Client side resume after the upload was paused
+            for (i = 0; i < self._upload.parallel; i += 1) {
+                self._nextPart();
             }
         }
     }
@@ -124,14 +132,27 @@ export class OpenStack extends CloudStorage {
                     self._setPart(response, result);
                 }, self._defaultError.bind(self));
             });
-        } else if (self._currentParts.length === 0) {
+        } else if (self._currentParts.length === 1 && self._currentParts[0] === partNum) {
             // This is the final commit
             self._api.sign('finish').subscribe((response) => {
                 self._api.signedRequest(response).request
-                    .then(() => {
-                        self._completeUpload();
-                    }, self._defaultError.bind(self));
+                    .then(self._completeUpload.bind(self), self._defaultError.bind(self));
             }, self._defaultError.bind(self));
+        } else {
+            // Remove part just added to _currentParts
+            // We need this logic when performing parallel uploads
+            self._partComplete(partNum);
+
+            // We should update upload progress
+            // NOTE:: no need to subscribe as API does this for us
+            // also this is a non-critical request.
+            //
+            // Also this is only executed towards the end of an upload
+            // as no new parts are being requested to update the status
+            self._api.update({
+                part_list: self._getCurrentParts(),
+                part_update: true
+            });
         }
     }
 

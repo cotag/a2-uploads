@@ -187,6 +187,27 @@ export abstract class CloudStorage {
             });
         }
     }
+
+    // This provides the minimum information required to be
+    // stored for resuming a parallel upload
+    protected _getPartData() {
+        var partList = this._getCurrentParts(),
+            partData = {};
+
+        partList.forEach(function (partNum) {
+            var lookup = partNum.toString(),
+                details = this._memoization[lookup];
+
+            if (details) {
+                partData[lookup] = details;
+            }
+        });
+
+        return {
+            part_list: partList,
+            part_data: partData
+        };
+    }
 }
 
 
