@@ -131,7 +131,7 @@ export class OpenStack extends CloudStorage {
                 ).subscribe((response) => {
                     self._setPart(response, result);
                 }, self._defaultError.bind(self));
-            });
+            }, self._defaultError.bind(self));
         } else if (self._currentParts.length === 1 && self._currentParts[0] === partNum) {
             // This is the final commit
             self._api.sign('finish').subscribe((response) => {

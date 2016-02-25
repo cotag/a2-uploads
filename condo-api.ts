@@ -262,7 +262,10 @@ export class CondoApi {
 
             xhr.addEventListener('load', (evt: any) => {
                 self._currentRequests.delete(promise);
-                if (xhr.status >= 200 && xhr.status < 300) {
+
+                // We are looking for a success response unless there is an expected response
+                if ((xhr.status >= 200 && xhr.status < 300) ||
+                    (xhr.status === opts.expected)) {
                     resolve(xhr);
                 } else {
                     reject(`${xhr.status}: ${xhr.statusText}`);
