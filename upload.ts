@@ -41,6 +41,9 @@ export abstract class CloudStorage {
 
     // Store hashing results in case the user pauses and resumes
     protected _memoization: any = {};
+    protected _isDirectUpload: boolean = false;
+    protected _isFinishing: boolean = false;
+
     private   _lastPart: number = 0;
 
 
@@ -61,12 +64,12 @@ export abstract class CloudStorage {
     }
 
     pause() {
-        if (this._strategy && this.state === State.Uploading) {
+        if (this._strategy && this.state === State.Uploading && !this._isDirectUpload) {
             this.state = State.Paused;
             this._api.abort();
             this._pendingParts = this._getCurrentParts();
             this._currentParts = [];
-        } else if (!this._strategy) {
+        } else if (!this._strategy || this._isDirectUpload) {
             // We don't have a strategy yet
             this.state = State.Paused;
             this._api.abort();
@@ -157,6 +160,8 @@ export abstract class CloudStorage {
 
     protected _restart() {
         this._strategy = undefined;
+        this._currentParts = [];
+        this._pendingParts = [];
     }
 
     protected _hashData(id: string, dataCb, hashCb) {
@@ -194,7 +199,7 @@ export abstract class CloudStorage {
         var partList = this._getCurrentParts(),
             partData = {};
 
-        partList.forEach(function (partNum) {
+        partList.forEach((partNum) => {
             var lookup = partNum.toString(),
                 details = this._memoization[lookup];
 

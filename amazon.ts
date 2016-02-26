@@ -188,28 +188,31 @@ export class Amazon extends CloudStorage {
                     self._setPart(response, result);
                 }, self._defaultError.bind(self));
             }, self._defaultError.bind(self));
-        } else if (self._currentParts.length === 1 && self._currentParts[0] === partNum) {
-            // This is the final commit
-            self._api.sign('finish').subscribe((request) => {
-                request.data = self._generatePartManifest();
-
-                self._api.signedRequest(request).request
-                    .then(self._completeUpload.bind(self), self._defaultError.bind(self));
-            }, self._defaultError.bind(self));
         } else {
-            // Remove part just added to _currentParts
-            // We need this logic when performing parallel uploads
-            self._partComplete(partNum);
+            if (self._currentParts.length === 1 && self._currentParts[0] === partNum) {
+                // This is the final commit
+                self._isFinishing = true;
+                self._api.sign('finish').subscribe((request) => {
+                    request.data = self._generatePartManifest();
 
-            // We should update upload progress
-            // NOTE:: no need to subscribe as API does this for us
-            // also this is a non-critical request.
-            //
-            // Also this is only executed towards the end of an upload
-            // as no new parts are being requested to update the status
-            details = self._getPartData();
-            details.part_update = true;
-            self._api.update(details);
+                    self._api.signedRequest(request).request
+                        .then(self._completeUpload.bind(self), self._defaultError.bind(self));
+                }, self._defaultError.bind(self));
+            } else if (!self._isFinishing) {
+                // Remove part just added to _currentParts
+                // We need this logic when performing parallel uploads
+                self._partComplete(partNum);
+
+                // We should update upload progress
+                // NOTE:: no need to subscribe as API does this for us
+                // also this is a non-critical request.
+                //
+                // Also this is only executed towards the end of an upload
+                // as no new parts are being requested to update the status
+                details = self._getPartData();
+                details.part_update = true;
+                self._api.update(details);
+            }
         }
     }
 
@@ -226,6 +229,8 @@ export class Amazon extends CloudStorage {
     private _direct(request, partInfo) {
         var self = this,
             monitor = self._requestWithProgress(partInfo, request);
+
+        self._isDirectUpload = true;
 
         monitor.then(() => {
             self._completeUpload();

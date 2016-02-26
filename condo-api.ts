@@ -273,7 +273,7 @@ export class CondoApi {
             });
             xhr.addEventListener('error', evt => {
                 self._currentRequests.delete(promise);
-                reject(xhr.statusText || 'unknown error');
+                reject(`${xhr.status}: ${xhr.statusText || 'unknown error'}`);
             });
             xhr.addEventListener('abort', evt => {
                 self._currentRequests.delete(promise);

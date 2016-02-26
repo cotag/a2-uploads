@@ -118,6 +118,8 @@ export class Google extends CloudStorage {
         var self = this,
             monitor = self._requestWithProgress(partInfo, request);
 
+        self._isDirectUpload = true;
+
         monitor.then(() => {
             self._completeUpload();
         }, self._defaultError.bind(self));

@@ -4,7 +4,7 @@ import {Upload, State, CloudStorage} from './upload';
 
 
 export class OpenStack extends CloudStorage {
-    static lookup: string = 'OpenStackSwift';
+    static lookup: string = 'RackspaceCloudFiles';
 
     // 2MB part size
     private _partSize: number = 2097152;
@@ -96,14 +96,24 @@ export class OpenStack extends CloudStorage {
                     self._nextPart();
                 }
             } else {
-                // We are provided with the first request
-                self._nextPartNumber();
-                self._setPart(request, firstChunk);
+                self._api.update({
+                    resumable_id: 'n/a',
+                    file_id: firstChunk.md5,
+                    part: 1
+                }).subscribe((data) => {
+                    // We are provided with the first request
+                    self._nextPartNumber();
+                    self._setPart(data, firstChunk);
 
-                // Then we want to request any parallel parts
-                for (i = 1; i < self._upload.parallel; i += 1) {
-                    self._nextPart();
-                }
+                    // Then we want to request any parallel parts
+                    for (i = 1; i < self._upload.parallel; i += 1) {
+                        self._nextPart();
+                    }
+                }, function(reason) {
+                    // We should start from the beginning
+                    self._restart();
+                    self._defaultError(reason);
+                });
             }
         } else {
             // Client side resume after the upload was paused
@@ -115,7 +125,8 @@ export class OpenStack extends CloudStorage {
 
     private _nextPart() {
         var self = this,
-            partNum = self._nextPartNumber();
+            partNum = self._nextPartNumber(),
+            details: any;
 
         if ((partNum - 1) * self._partSize < self.size) {
             self._processPart(partNum).then((result) => {
@@ -124,35 +135,38 @@ export class OpenStack extends CloudStorage {
                     return;
                 };
 
+                details = self._getPartData();
+
                 self._api.nextChunk(
                     partNum,
                     result.md5,
-                    self._getCurrentParts()
+                    details.part_list,
+                    details.part_data
                 ).subscribe((response) => {
                     self._setPart(response, result);
                 }, self._defaultError.bind(self));
             }, self._defaultError.bind(self));
-        } else if (self._currentParts.length === 1 && self._currentParts[0] === partNum) {
-            // This is the final commit
-            self._api.sign('finish').subscribe((response) => {
-                self._api.signedRequest(response).request
-                    .then(self._completeUpload.bind(self), self._defaultError.bind(self));
-            }, self._defaultError.bind(self));
         } else {
-            // Remove part just added to _currentParts
-            // We need this logic when performing parallel uploads
-            self._partComplete(partNum);
+            if (self._currentParts.length === 1 && self._currentParts[0] === partNum) {
+                // This is the final commit
+                // OpenStack won't allow the user to perform the final commit using a signed URL
+                self._api.sign('finish').subscribe(self._completeUpload.bind(self), self._defaultError.bind(self));
+            } else if (!self._isFinishing) {
+                // Remove part just added to _currentParts
+                // We need this logic when performing parallel uploads
+                self._partComplete(partNum);
 
-            // We should update upload progress
-            // NOTE:: no need to subscribe as API does this for us
-            // also this is a non-critical request.
-            //
-            // Also this is only executed towards the end of an upload
-            // as no new parts are being requested to update the status
-            self._api.update({
-                part_list: self._getCurrentParts(),
-                part_update: true
-            });
+                // We should update upload progress
+                // NOTE:: no need to subscribe as API does this for us
+                // also this is a non-critical request.
+                //
+                // Also this is only executed towards the end of an upload
+                // as no new parts are being requested to update the status
+                self._api.update({
+                    part_list: self._getCurrentParts(),
+                    part_update: true
+                });
+            }
         }
     }
 
@@ -169,6 +183,8 @@ export class OpenStack extends CloudStorage {
     private _direct(request, partInfo) {
         var self = this,
             monitor = self._requestWithProgress(partInfo, request);
+
+        self._isDirectUpload = true;
 
         monitor.then(() => {
             self._completeUpload();
