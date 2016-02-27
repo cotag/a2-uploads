@@ -24,6 +24,20 @@ export class OpenStack extends CloudStorage {
             // Prevents this function being called twice
             self._strategy = null;
 
+            // Update part size
+            // Not because we have to, no limits as such with openstack
+            // This ensures requests don't break any limits on our system
+            if ((self._partSize * 9999) < self.size) {
+                self._partSize = self.size / 9999;
+
+                // 5GB limit on part sizes (this is a limit on openstack)
+                if (self._partSize > (5 * 1024 * 1024 * 1024)) {
+                    self._upload.cancel();
+                    self._defaultError('file exceeds maximum size');
+                    return;
+                }
+            }
+
             self._processPart(1).then((result) => {
                 if (self.state !== State.Uploading) {
                     // upload was paused or aborted as we were reading the file
@@ -74,7 +88,8 @@ export class OpenStack extends CloudStorage {
             return hasher.hash(data).then((md5: string) => {
                 return {
                     md5: md5,
-                    part: part
+                    part: part,
+                    size_bytes: data.size
                 };
             });
         });
@@ -103,6 +118,7 @@ export class OpenStack extends CloudStorage {
                 }).subscribe((data) => {
                     // We are provided with the first request
                     self._nextPartNumber();
+                    self._memoization[1].path = data.path;
                     self._setPart(data, firstChunk);
 
                     // Then we want to request any parallel parts
@@ -121,6 +137,28 @@ export class OpenStack extends CloudStorage {
                 self._nextPart();
             }
         }
+    }
+
+    private _generatePartManifest() {
+        var parts:any = [],
+            i: number,
+            etag: any;
+
+        for (i = 1; i < 10000; i += 1) {
+            etag = this._memoization[i];
+
+            if (etag) {
+                parts.push({
+                    path: etag.path,
+                    etag: etag.md5,
+                    size_bytes: etag.size_bytes
+                });
+            } else {
+                break;
+            }
+        }
+
+        return JSON.stringify(parts);
     }
 
     private _nextPart() {
@@ -143,14 +181,21 @@ export class OpenStack extends CloudStorage {
                     details.part_list,
                     details.part_data
                 ).subscribe((response) => {
+                    self._memoization[partNum].path = response.path;
+
                     self._setPart(response, result);
                 }, self._defaultError.bind(self));
             }, self._defaultError.bind(self));
         } else {
             if (self._currentParts.length === 1 && self._currentParts[0] === partNum) {
                 // This is the final commit
-                // OpenStack won't allow the user to perform the final commit using a signed URL
-                self._api.sign('finish').subscribe(self._completeUpload.bind(self), self._defaultError.bind(self));
+                self._isFinishing = true;
+                self._api.sign('finish').subscribe((request) => {
+                    request.data = self._generatePartManifest();
+
+                    self._api.signedRequest(request).request
+                        .then(self._completeUpload.bind(self), self._defaultError.bind(self));
+                }, self._defaultError.bind(self));
             } else if (!self._isFinishing) {
                 // Remove part just added to _currentParts
                 // We need this logic when performing parallel uploads
@@ -162,10 +207,9 @@ export class OpenStack extends CloudStorage {
                 //
                 // Also this is only executed towards the end of an upload
                 // as no new parts are being requested to update the status
-                self._api.update({
-                    part_list: self._getCurrentParts(),
-                    part_update: true
-                });
+                details = self._getPartData();
+                details.part_update = true;
+                self._api.update(details);
             }
         }
     }
