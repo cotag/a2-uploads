@@ -44,7 +44,8 @@ export abstract class CloudStorage {
     protected _isDirectUpload: boolean = false;
     protected _isFinishing: boolean = false;
 
-    private   _lastPart: number = 0;
+    private _lastPart: number = 0;
+    private _progress: any = {};
 
 
     constructor(protected _api: CondoApi, protected _upload: Upload, private _completeCB: any) {
@@ -75,6 +76,14 @@ export abstract class CloudStorage {
             this._api.abort();
             this._restart();
         }
+
+        var key;
+        for (key in this._progress) {
+            if (this._progress[key].loaded !== this._progress[key].total) {
+                this._progress[key].loaded = 0;
+            }
+        };
+        this._updateProgress();
     }
 
     destroy() {
@@ -148,15 +157,23 @@ export abstract class CloudStorage {
 
         monitor = self._api.signedRequest(request, true);
         monitor.progress.subscribe((vals) => {
-            // TODO:: progress is incorrect here
-            // we need this to be tracked properly
-            self.progress = vals.loaded;
-            self.size = vals.total;
+            self._progress[partInfo.part] = vals;
+            self._updateProgress();
         });
 
         return monitor.request;
     }
 
+    protected _updateProgress() {
+        var key,
+            total: number = 0;
+
+        for (key in this._progress) {
+            total += this._progress[key].loaded;
+        };
+
+        this._upload.progress = total;
+    }
 
     protected _restart() {
         this._strategy = undefined;
@@ -225,6 +242,9 @@ export class Upload {
     complete: boolean = false;
     uploading: boolean = false;
     cancelled: boolean = false;
+    totalBytes: number;
+    progress: number = 0;
+    filename: string = '';
     metadata: any;    // Data provided at the start and completion of an upload
 
     // Provide feedback as to why an upload failed
@@ -242,6 +262,18 @@ export class Upload {
     private _retries: number = 0;
 
 
+    static humanReadableByteCount(bytes: number, si: boolean = false) {
+        var unit = si ? 1000.0 : 1024.0;
+
+        if (bytes < unit) { return bytes + (si ? ' iB' : ' B'); }
+
+        var exp = Math.floor(Math.log(bytes) / Math.log(unit)),
+            pre = (si ? 'kMGTPE' : 'KMGTPE').charAt(exp - 1) + (si ? 'iB' : 'B');
+
+        return (bytes / Math.pow(unit, exp)).toFixed(1) + ' ' + pre;
+    }
+
+
     constructor(
         private _http: Http,
         private _apiEndpoint: string,
@@ -254,6 +286,11 @@ export class Upload {
             self._resolve = resolve;
             self._reject = reject;
         });
+        self.totalBytes = self.file.size;
+
+        if (self.file.name) {
+            self.filename = self.file.name;
+        }
     }
 
     resume(parallel?:number) {
@@ -315,18 +352,6 @@ export class Upload {
             return true;
         }
         return false;
-    }
-
-    humanReadableByteCount(si:boolean = false) {
-        var unit = si ? 1000.0 : 1024.0,
-            bytes = this.file.size;
-
-        if (bytes < unit) { return bytes + (si ? ' iB' : ' B'); }
-
-        var exp = Math.floor(Math.log(bytes) / Math.log(unit)),
-            pre = (si ? 'kMGTPE' : 'KMGTPE').charAt(exp - 1) + (si ? 'iB' : 'B');
-
-        return (bytes / Math.pow(unit, exp)).toFixed(1) + ' ' + pre;
     }
 
     notifyError(err) {

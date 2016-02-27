@@ -245,20 +245,24 @@ export class CondoApi {
         promise = new Promise((resolve, reject) => {
             var i: string,
                 xhr = new XMLHttpRequest(),
-                observer;
+                observable;
 
             if (monitor) {
                 response.progress = new Observable<{ loaded: number, total: number }>((obs) => {
-                    observer = obs;
+                    observable = obs;
                 });
+            }
 
-                xhr.addEventListener('progress', (evt: any) => {
-                    observer.next({
+            // For whatever reason, this event has to bound before
+            // the upload starts or it does not fire (at least on Chrome)
+            xhr.upload.addEventListener('progress', (evt: any) => {
+                if (evt.lengthComputable && observable) {
+                    observable.next({
                         loaded: evt.loaded,
                         total: evt.total
                     });
-                });
-            }
+                }
+            });
 
             xhr.addEventListener('load', (evt: any) => {
                 self._currentRequests.delete(promise);
