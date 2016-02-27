@@ -1,6 +1,7 @@
 
 import {CondoApi} from './condo-api';
 import {Upload, State, CloudStorage} from './upload';
+import {Md5Workers} from './md5-workers';
 
 
 export class OpenStack extends CloudStorage {
@@ -10,8 +11,8 @@ export class OpenStack extends CloudStorage {
     private _partSize: number = 2097152;
 
 
-    constructor(api: CondoApi, upload: Upload, completeCB: any) {
-        super(api, upload, completeCB);
+    constructor(api: CondoApi, upload: Upload, workers: Md5Workers, completeCB: any) {
+        super(api, upload, workers, completeCB);
     }
 
 
@@ -82,7 +83,7 @@ export class OpenStack extends CloudStorage {
             return data;
         }, (data) => {
             // We hash in here as not all cloud providers may use MD5
-            var hasher = CondoApi.nextHasher();
+            var hasher = self._md5Workers.next();
 
             // Hash the part and return the result
             return hasher.hash(data).then((md5: string) => {

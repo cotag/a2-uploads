@@ -2,6 +2,7 @@
 import {Http} from 'angular2/http';
 
 import {CondoApi} from './condo-api';
+import {Md5Workers} from './md5-workers';
 
 
 // All providers share these states
@@ -14,7 +15,7 @@ export enum State {
 
 // Must be the same as CloudStorage
 export interface ICloudStorage {
-    new (_api: CondoApi, _upload: Upload, _completeCB: any): CloudStorage;
+    new (_api: CondoApi, _upload: Upload, _md5Workers: Md5Workers, _completeCB: any): CloudStorage;
     lookup: string;
 }
 
@@ -48,7 +49,7 @@ export abstract class CloudStorage {
     private _progress: any = {};
 
 
-    constructor(protected _api: CondoApi, protected _upload: Upload, private _completeCB: any) {
+    constructor(protected _api: CondoApi, protected _upload: Upload, protected _md5Workers: Md5Workers, private _completeCB: any) {
         this._file = this._upload.file;
         this.size = this._file.size;
     }
@@ -277,6 +278,7 @@ export class Upload {
     constructor(
         private _http: Http,
         private _apiEndpoint: string,
+        private _md5Workers: Md5Workers,
         public file: any,
         public retries: number,
         public parallel: number
@@ -379,7 +381,7 @@ export class Upload {
         var Provider = Upload.provider[residence];
 
         if (Provider) {
-            this._provider = new Provider(this._api, this, this._resolve);
+            this._provider = new Provider(this._api, this, this._md5Workers, this._resolve);
             this._initialised = true;
         } else {
             // inform the user that this is not implemented

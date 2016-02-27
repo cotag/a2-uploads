@@ -8,6 +8,7 @@ import {DropFiles} from 'a2-file-drop/dist/drop-files';
 
 // Manager imports
 import {ICloudStorage, Upload} from './upload';
+import {Md5Workers} from './md5-workers';
 
 
 export class UploadManager {
@@ -31,10 +32,11 @@ export class UploadManager {
 
 
     constructor(
-        private _http: Http,
-        private _apiEndpoint: string,
+        http: Http,
+        apiEndpoint: string,
         dropService: DropService,
         streamName: string,
+        md5Workers: Md5Workers,
         map?: (files: DropFiles) => any
     ) {
         var self: UploadManager = this;
@@ -69,7 +71,7 @@ export class UploadManager {
                 completeCallback = self._uploadComplete.bind(self);
 
             files.forEach((file) => {
-                var upload: Upload = new Upload(self._http, self._apiEndpoint, file, self.retries, self.parallel);
+                var upload: Upload = new Upload(http, apiEndpoint, md5Workers, file, self.retries, self.parallel);
                 self.uploads.push(upload);
 
                 // Apply metadata

@@ -1,36 +1,17 @@
 
 import {Observable} from 'rxjs/Rx';
 import {Http, Headers, URLSearchParams} from 'angular2/http';
-import {ParallelHasher} from 'ts-md5/dist/parallel_hasher';
 
 import {Upload} from './upload';
 
 
 export class CondoApi {
-    // TODO:: we need to have a configurable variable indicate the
-    // location of the worker files.
-    private static _next: number = -1;
-    private static _workers = [
-        new ParallelHasher('/node_modules/ts-md5/dist/md5_worker.js'),
-        new ParallelHasher('/node_modules/ts-md5/dist/md5_worker.js'),
-        new ParallelHasher('/node_modules/ts-md5/dist/md5_worker.js')
-    ];
-
     public uploadId: string;
 
     private _params: any;
     private _uploadId: string;
     private _currentRequests = new Set<any>();
 
-
-    static nextHasher() {
-        this._next += 1;
-        if (this._next >= this._workers.length) {
-            this._next = 0;
-        }
-
-        return this._workers[this._next];
-    }
 
     static hexToBin(input: string) {
         var result = '',
