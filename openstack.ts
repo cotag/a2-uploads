@@ -5,7 +5,7 @@ import {Md5Workers} from './md5-workers';
 
 
 export class OpenStack extends CloudStorage {
-    static lookup: string = 'RackspaceCloudFiles';
+    static lookup: string = 'OpenStackSwift';
 
     // 2MB part size
     private _partSize: number = 2097152;
