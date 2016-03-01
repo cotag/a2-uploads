@@ -215,14 +215,13 @@ export abstract class CloudStorage {
     // stored for resuming a parallel upload
     protected _getPartData() {
         var partList = this._getCurrentParts(),
-            partData = {};
+            partData = [];
 
         partList.forEach((partNum) => {
-            var lookup = partNum.toString(),
-                details = this._memoization[lookup];
+            var details = this._memoization[partNum.toString()];
 
             if (details) {
-                partData[lookup] = details;
+                partData.push(details);
             }
         });
 

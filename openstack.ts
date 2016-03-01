@@ -105,7 +105,24 @@ export class OpenStack extends CloudStorage {
                 // The upload has already started and we want to continue where we left off
                 self._pendingParts = <Array<number>>request.part_list;
                 if (request.part_data) {
+                    var partId,
+                        part;
+
                     self._memoization = request.part_data;
+
+                    // If we are missing data we need to upload the part again
+                    for (partId in self._memoization) {
+                        part = self._memoization[partId];
+
+                        if (!part.path) {
+                            self._pendingParts.push(part.part);
+                        }
+                    }
+
+                    // Lets sort and remove duplicate entries
+                    self._pendingParts = self._pendingParts.sort().filter(function(item, pos, ary) {
+                        return !pos || item !== ary[pos - 1];
+                    });
                 }
 
                 for (i = 0; i < self._upload.parallel; i += 1) {
