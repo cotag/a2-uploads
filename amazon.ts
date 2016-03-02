@@ -45,7 +45,7 @@ export class Amazon extends CloudStorage {
                 }
 
                 self._api.create({
-                    file_id: result.md5
+                    file_id: window.btoa(CondoApi.hexToBin(result.md5))
                 })
                 .subscribe((response) => {
                     self._strategy = response.type;
