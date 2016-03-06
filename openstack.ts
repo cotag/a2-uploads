@@ -209,10 +209,15 @@ export class OpenStack extends CloudStorage {
                 // This is the final commit
                 self._isFinishing = true;
                 self._api.sign('finish').subscribe((request) => {
-                    request.data = self._generatePartManifest();
-
-                    self._api.signedRequest(request).request
-                        .then(self._completeUpload.bind(self), self._defaultError.bind(self));
+                    // This might occur on the server.
+                    // So we need to check the response
+                    if (request.signature) {
+                        request.data = self._generatePartManifest();
+                        self._api.signedRequest(request).request
+                            .then(self._completeUpload.bind(self), self._defaultError.bind(self));
+                    } else {
+                        self._completeUpload();
+                    }
                 }, self._defaultError.bind(self));
             } else if (!self._isFinishing) {
                 // Remove part just added to _currentParts
