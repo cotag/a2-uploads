@@ -26,10 +26,9 @@ export class OpenStack extends CloudStorage {
             self._strategy = null;
 
             // Update part size
-            // Not because we have to, no limits as such with openstack
-            // This ensures requests don't break any limits on our system
-            if ((self._partSize * 9999) < self.size) {
-                self._partSize = self.size / 9999;
+            // Openstack has a limit of 1000 parts for a static large file
+            if ((self._partSize * 1000) < self.size) {
+                self._partSize = Math.floor(self.size / 1000);
 
                 // 5GB limit on part sizes (this is a limit on openstack)
                 if (self._partSize > (5 * 1024 * 1024 * 1024)) {

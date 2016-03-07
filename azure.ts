@@ -29,7 +29,7 @@ export class Azure extends CloudStorage {
             // Not because we have to, no limits as such with openstack
             // This ensures requests don't break any limits on our system
             if ((self._partSize * 50000) < self.size) {
-                self._partSize = self.size / 50000;
+                self._partSize = Math.floor(self.size / 50000);
 
                 // 4MB limit on part sizes
                 if (self._partSize > (4 * 1024 * 1024)) {

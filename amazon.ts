@@ -27,7 +27,7 @@ export class Amazon extends CloudStorage {
 
             // Update part size if required
             if ((self._partSize * 9999) < self.size) {
-                self._partSize = self.size / 9999;
+                self._partSize = Math.floor(self.size / 9999);
 
                 // 5GB limit on part sizes
                 if (self._partSize > (5 * 1024 * 1024 * 1024)) {
