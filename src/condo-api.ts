@@ -210,7 +210,7 @@ export class CondoApi {
 
         self.abort();
         if (self._uploadId) {
-            return self._http.delete(`${ self._apiEndpoint }/${ encodeURIComponent(self._uploadId) }`);
+            self._http.delete(`${ self._apiEndpoint }/${ encodeURIComponent(self._uploadId) }`);
         }
     }
 

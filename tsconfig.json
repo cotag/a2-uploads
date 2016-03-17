@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "es5",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "sourceMap": true,
+    "moduleResolution": "node",
+    "declaration": true,
+    "outDir": "./dist"
+  },
+  "files": [
+    "src/upload-manager.ts",
+    "src/upload.ts",
+    "src/amazon.ts",
+    "src/azure.ts",
+    "src/google.ts",
+    "src/openstack.ts",
+    "node_modules/typescript/lib/lib.es6.d.ts"
+  ]
+}

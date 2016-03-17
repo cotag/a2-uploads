@@ -1,0 +1,42 @@
+{
+  "bugs": {
+    "url": "https://github.com/cotag/a2-uploads/issues"
+  },
+  "contributors": [],
+  "devDependencies": {
+    "angular2": "latest",
+    "rxjs": "latest",
+    "jasmine-core": "latest",
+    "karma": "latest",
+    "karma-chrome-launcher": "latest",
+    "karma-jasmine": "latest",
+    "karma-webpack": "latest",
+    "ts-loader": "latest",
+    "typescript": "latest"
+  },
+  "dependencies": {
+    "ts-md5": "latest"
+  },
+  "description": "Angular2 direct to cloud file uploads",
+  "directories": {},
+  "homepage": "https://github.com/cotag/a2-uploads",
+  "license": "MIT",
+  "maintainers": [
+    {
+      "name": "Stephen von Takach",
+      "email": "steve@cotag.me"
+    }
+  ],
+  "name": "a2-uploads",
+  "optionalDependencies": {},
+  "peerDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cotag/a2-uploads.git"
+  },
+  "scripts": {
+    "build": "node node_modules/typescript/bin/tsc",
+    "test": "node node_modules/karma/bin/karma start karma.conf.js"
+  },
+  "version": "1.0.0"
+}
