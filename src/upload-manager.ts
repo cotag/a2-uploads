@@ -1,77 +1,97 @@
 // Angular2 imports
-import {Http} from 'angular2/http';
+import { Injectable } from '@angular/core';
+import { Http } from '@angular/http';
 
 // Manager imports
-import {ICloudStorage, Upload} from './upload';
-import {Md5Workers} from './md5-workers';
+import { ICloudStorage } from './cloud-storage';
+import { CondoApi } from './condo-api';
+import { Md5Workers } from './md5-workers';
+import { LIB_UTILS } from './settings';
+import { Upload } from './upload';
 
-
+@Injectable()
 export class UploadManager {
-    uploads: Array<Upload> = [];
 
-    autoStart: boolean = true;
-    autoRemove: boolean = false;
-    removeAfter: number = 0;
-    simultaneous: number = 2;    // Uploads
-    parallel: number = 3;        // Parallel parts of an upload
-    retries: number = 4;         // Number of times a failed part can occur for an upload
-
-    metadata: any;               // Additional data to be provided with the upload
-
-
-    static addProvider(provider: ICloudStorage) {
+    public static addProvider(provider: ICloudStorage) {
         Upload.provider[provider.lookup] = provider;
+        LIB_UTILS.log('Manager', `Added provider '${provider.lookup}'`);
     }
 
+    public uploads: Upload[] = [];
 
-    constructor(
-        private _http: Http,
-        private _apiEndpoint: string,
-        private _md5Workers: Md5Workers
-    ) {}
+    public autoStart: boolean = true;
+    public autoRemove: boolean = false;
+    public removeAfter: number = 0;
+    public simultaneous: number = 2;    // Uploads
+    public parallel: number = 3;        // Parallel parts of an upload
+    public retries: number = 4;         // Number of times a failed part can occur for an upload
 
-    upload(files: Array<Blob>) {
-        var self = this,
-            autostart = self.autoStart,
-            completeCallback = self._uploadComplete.bind(self);
+    public metadata: any;               // Additional data to be provided with the upload
+
+    private _apiEndpoint: string;
+    private _token: string = '';
+
+    constructor(private _http: Http,
+                private _md5Workers: Md5Workers) {
+    }
+
+    set endpoint(url: string) {
+        this._apiEndpoint = url;
+    }
+
+    set token(token: string) {
+        CondoApi.token = token;
+    }
+
+    set worker_base(url: string) {
+        this._md5Workers.setup(url);
+    }
+
+    public upload(files: Blob[], params?: any) {
+        if (!this._apiEndpoint) {
+            LIB_UTILS.error('Manager', 'No set endpoint.');
+            return;
+        }
+        let autostart = this.autoStart;
+        const completeCallback = this._uploadComplete.bind(this);
 
         files.forEach((file) => {
-            var upload: Upload = new Upload(self._http, self._apiEndpoint, self._md5Workers, file, self.retries, self.parallel);
-            self.uploads.push(upload);
+            const upload: Upload = new Upload(this._http, this._apiEndpoint, this._md5Workers, file, this.retries, this.parallel, params);
+            this.uploads.push(upload);
 
             // Apply metadata
-            upload.metadata = self.metadata;
+            upload.metadata = this.metadata;
 
             // watch for completion
             upload.promise.then(completeCallback, completeCallback);
 
             // Only autostart if we under our simultaneous limit
             if (autostart) {
-                autostart = self._checkAutostart();
+                autostart = this._checkAutostart();
                 if (autostart) {
-                    upload.resume(self.parallel);
+                    upload.resume(this.parallel);
                 }
             }
         });
     }
 
-    pauseAll() {
+    public pauseAll() {
         this.uploads.forEach((upload) => {
             upload.pause();
         });
     }
 
-    resumeUpload(upload) {
+    public resumeUpload(upload) {
         upload.resume(this.parallel);
     }
 
-    resumeAll() {
+    public resumeAll() {
         this.uploads.forEach((upload) => {
             upload.resume(this.parallel);
         });
     }
 
-    updateMetadata(metadata:any) {
+    public updateMetadata(metadata: any) {
         this.metadata = metadata;
 
         this.uploads.forEach((upload) => {
@@ -79,8 +99,8 @@ export class UploadManager {
         });
     }
 
-    remove(upload: Upload) {
-        var index: number = this.uploads.indexOf(upload);
+    public remove(upload: Upload) {
+        const index: number = this.uploads.indexOf(upload);
         upload.cancel();
 
         if (index !== -1) {
@@ -88,7 +108,7 @@ export class UploadManager {
         }
     }
 
-    removeAll() {
+    public removeAll() {
         this.uploads.forEach((upload) => {
             upload.cancel();
         });
@@ -96,9 +116,9 @@ export class UploadManager {
         this.uploads = [];
     }
 
-    removeComplete() {
-        var complete: Array<Upload> = [],
-            uploads = this.uploads;
+    public removeComplete() {
+        const complete: Upload[] = [];
+        const uploads = this.uploads;
 
         uploads.forEach((upload) => {
             if (upload.complete) {
@@ -107,16 +127,15 @@ export class UploadManager {
         });
 
         complete.forEach((upload) => {
-            var index: number = uploads.indexOf(upload);
+            const index: number = uploads.indexOf(upload);
             uploads.splice(index, 1);
         });
     }
 
-
     private _checkAutostart() {
-        var uploading: number = 0,
-            length: number = this.uploads.length,
-            index: number = 0;
+        let uploading: number = 0;
+        const length: number = this.uploads.length;
+        let index: number = 0;
 
         for (; index < length; index += 1) {
             if (this.uploads[index].uploading) {
@@ -132,23 +151,22 @@ export class UploadManager {
     }
 
     private _uploadComplete(upload) {
-        var self = this,
-            index:number;
+        let index: number;
 
-        if (self.autoRemove) {
-            if (self.removeAfter) {
+        if (this.autoRemove) {
+            if (this.removeAfter) {
                 setTimeout(() => {
-                    self.remove(upload);
-                }, self.removeAfter);
+                    this.remove(upload);
+                }, this.removeAfter);
             } else {
-                self.remove(upload);
+                this.remove(upload);
             }
         }
 
-        if (self.autoStart && self.uploads.length > 0 && self._checkAutostart()) {
-            for (index = 0; index < self.uploads.length; index += 1) {
-                if (self.uploads[index].isWaiting()) {
-                    self.uploads[index].resume(self.parallel);
+        if (this.autoStart && this.uploads.length > 0 && this._checkAutostart()) {
+            for (index = 0; index < this.uploads.length; index += 1) {
+                if (this.uploads[index].isWaiting()) {
+                    this.uploads[index].resume(this.parallel);
                     break;
                 }
             }

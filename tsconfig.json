@@ -1,21 +1,41 @@
 {
-  "compilerOptions": {
-    "module": "commonjs",
-    "target": "es5",
-    "emitDecoratorMetadata": true,
-    "experimentalDecorators": true,
-    "sourceMap": true,
-    "moduleResolution": "node",
-    "declaration": true,
-    "outDir": "./dist"
-  },
-  "files": [
-    "src/upload-manager.ts",
-    "src/upload.ts",
-    "src/amazon.ts",
-    "src/azure.ts",
-    "src/google.ts",
-    "src/openstack.ts",
-    "node_modules/typescript/lib/lib.es6.d.ts"
-  ]
+    "compilerOptions": {
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "noImplicitAny": true,
+        "suppressImplicitAnyIndexErrors": true,
+        "removeComments": false,
+        "sourceMap": true,
+        "target": "es5",
+        "outDir": "./dist",
+        "lib": [
+            "dom",
+            "es6"
+        ],
+        "types": [
+            "hammerjs",
+            "jasmine",
+            "node",
+            "protractor",
+            "selenium-webdriver",
+            "source-map",
+            "uglify-js",
+            "webpack"
+        ]
+    },
+    "files": [
+        "dist/index.ts"
+    ],
+    "exclude": [
+      "node_modules",
+      "_build",
+      "src",
+      "dist",
+      "index.ts"
+    ],
+    "compileOnSave": false,
+    "buildOnSave": false,
+    "atom": { "rewriteTsconfig": false }
 }

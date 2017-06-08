@@ -1,0 +1,27 @@
+---
+engines:
+  tslint:
+    enabled: true
+    channel: beta
+  duplication:
+    enabled: true
+    exclude_paths:
+    - config
+    config:
+      languages:
+      - javascript
+  eslint:
+    enabled: true
+  fixme:
+    enabled: true
+ratings:
+  paths:
+  - "src/**/*"
+  - "config/**/*"
+  - "**.ts"
+  - "**.js"
+exclude_paths:
+- node_modules
+- dist
+- coverage
+- _build

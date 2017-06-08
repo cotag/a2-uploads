@@ -1,257 +1,41 @@
 
-import {Http} from 'angular2/http';
+import { Http } from '@angular/http';
 
-import {CondoApi} from './condo-api';
-import {Md5Workers} from './md5-workers';
-
-
-// All providers share these states
-export enum State {
-    Paused,
-    Uploading,
-    Completed,
-    Aborted
-}
-
-// Must be the same as CloudStorage
-export interface ICloudStorage {
-    new (_api: CondoApi, _upload: Upload, _md5Workers: Md5Workers, _completeCB: any): CloudStorage;
-    lookup: string;
-}
-
-
-// ============================
-// Storage Provider Abstraction
-// ============================
-export abstract class CloudStorage {
-    static name: string;
-
-    state: State = State.Paused;
-    size: number;
-    progress: number = 0;
-
-    // Strategy is used to indicate progress
-    // * undefined == not started
-    // * null      == we have made a call to create
-    // * string    == upload in progress
-    protected _strategy: string;
-    protected _file: any;
-    protected _finalising: boolean = false;
-    protected _pendingParts: Array<number> = [];
-    protected _currentParts: Array<number> = [];
-
-    // Store hashing results in case the user pauses and resumes
-    protected _memoization: any = {};
-    protected _isDirectUpload: boolean = false;
-    protected _isFinishing: boolean = false;
-
-    private _lastPart: number = 0;
-    private _progress: any = {};
-
-
-    constructor(protected _api: CondoApi, protected _upload: Upload, protected _md5Workers: Md5Workers, private _completeCB: any) {
-        this._file = this._upload.file;
-        this.size = this._file.size;
-    }
-
-
-    start() {
-        if (this.state < State.Uploading) {
-            if (this._finalising) {
-                this._completeUpload();
-            } else {
-                this._start();
-            }
-        }
-    }
-
-    pause() {
-        if (this._strategy && this.state === State.Uploading && !this._isDirectUpload) {
-            this.state = State.Paused;
-            this._api.abort();
-            this._pendingParts = this._getCurrentParts();
-            this._currentParts = [];
-        } else if (!this._strategy || this._isDirectUpload) {
-            // We don't have a strategy yet
-            this.state = State.Paused;
-            this._api.abort();
-            this._restart();
-        }
-
-        var key;
-        for (key in this._progress) {
-            if (this._progress[key].loaded !== this._progress[key].total) {
-                this._progress[key].loaded = 0;
-            }
-        };
-        this._updateProgress();
-    }
-
-    destroy() {
-        // Check the upload has not finished
-        if (this._strategy !== undefined && this.state < State.Completed) {
-            this._api.destroy();
-
-            // nullifies strategy
-            this._restart();
-            this.state = State.Aborted;
-        }
-    }
-
-
-    protected abstract _start(): any;
-
-
-    protected _nextPartNumber() {
-        if (this._pendingParts.length > 0) {
-            this._lastPart = this._pendingParts.shift();
-        } else {
-            this._lastPart += 1;
-        }
-
-        this._currentParts.push(this._lastPart);
-
-        return this._lastPart;
-    }
-
-    protected _getCurrentParts() {
-        return this._currentParts.concat(this._pendingParts);
-    }
-
-    protected _partComplete(number:number) {
-        this._currentParts = this._currentParts.filter((val) => {
-            return val !== number;
-        });
-    }
-
-    // NOTE:: Should probably be protected.
-    // Only called by an upload strategy
-    protected _completeUpload() {
-        var self = this;
-
-        self._finalising = true;
-        self.state = State.Uploading;
-
-        self._api.update().subscribe(() => {
-            self.progress = self.size;
-            self._finalising = false;
-            self.state = State.Completed;
-
-            // Complete the upload
-            self._upload.complete = true;
-            self._upload.uploading = false;
-            self._upload.cancelled = false;
-            self._completeCB(self._upload);
-        }, self._defaultError.bind(self));
-    }
-
-    protected _defaultError(reason) {
-        this.pause();
-        this._upload.notifyError(reason);
-    }
-
-    protected _requestWithProgress(partInfo, request) {
-        var self = this,
-            monitor;
-
-        request.data = partInfo.data;
-
-        monitor = self._api.signedRequest(request, true);
-        monitor.progress.subscribe((vals) => {
-            self._progress[partInfo.part] = vals;
-            self._updateProgress();
-        });
-
-        return monitor.request;
-    }
-
-    protected _updateProgress() {
-        var key,
-            total: number = 0;
-
-        for (key in this._progress) {
-            total += this._progress[key].loaded;
-        };
-
-        this._upload.progress = total;
-    }
-
-    protected _restart() {
-        this._strategy = undefined;
-        this._currentParts = [];
-        this._pendingParts = [];
-    }
-
-    protected _hashData(id: string, dataCb, hashCb) {
-        var self = this,
-            result = self._memoization[id],
-
-            // We don't want to hold references to the data
-            data = dataCb();
-
-        if (result) {
-            // return the pre-calculated result if available
-            return new Promise((resolve) => {
-                resolve({
-                    data: data,
-                    md5: result.md5,
-                    part: result.part
-                });
-            });
-        } else {
-            // Perform the processing in full and save the result
-            return hashCb(data).then((result) => {
-                self._memoization[id] = result;
-                return {
-                    data: data,
-                    md5: result.md5,
-                    part: result.part
-                };
-            });
-        }
-    }
-
-    // This provides the minimum information required to be
-    // stored for resuming a parallel upload
-    protected _getPartData() {
-        var partList = this._getCurrentParts(),
-            partData = [];
-
-        partList.forEach((partNum) => {
-            var details = this._memoization[partNum.toString()];
-
-            if (details) {
-                partData.push(details);
-            }
-        });
-
-        return {
-            part_list: partList,
-            part_data: partData
-        };
-    }
-}
-
+import { CloudStorage } from './cloud-storage';
+import { CondoApi } from './condo-api';
+import { Md5Workers } from './md5-workers';
+import { LIB_UTILS } from './settings';
 
 // ============================================================
 // This is used to manage an upload to a Cloud Storage Provider
 // ============================================================
 export class Upload {
-    static provider: any = {};
+    public static provider: any = {};
 
-    complete: boolean = false;
-    uploading: boolean = false;
-    cancelled: boolean = false;
-    totalBytes: number;
-    progress: number = 0;
-    filename: string = '';
-    metadata: any;    // Data provided at the start and completion of an upload
+    public static humanReadableByteCount(bytes: number, si: boolean = false) {
+        const unit = si ? 1000.0 : 1024.0;
+
+        if (bytes < unit) { return bytes + (si ? ' iB' : ' B'); }
+
+        const exp = Math.floor(Math.log(bytes) / Math.log(unit));
+        const pre = (si ? 'kMGTPE' : 'KMGTPE').charAt(exp - 1) + (si ? 'iB' : 'B');
+
+        return (bytes / Math.pow(unit, exp)).toFixed(1) + ' ' + pre;
+    }
+
+    public complete: boolean = false;
+    public uploading: boolean = false;
+    public cancelled: boolean = false;
+    public totalBytes: number;
+    public progress: number = 0;
+    public filename: string = '';
+    public metadata: any;    // Data provided at the start and completion of an upload
 
     // Provide feedback as to why an upload failed
-    error: string;
+    public error: string;
 
     // Resolved when the upload completes or is cancelled
-    promise: Promise<Upload>;
+    public promise: Promise<Upload>;
 
     private _initialised: boolean = false;
     private _resolve: any;
@@ -261,123 +45,107 @@ export class Upload {
     private _provider: CloudStorage;
     private _retries: number = 0;
 
-
-    static humanReadableByteCount(bytes: number, si: boolean = false) {
-        var unit = si ? 1000.0 : 1024.0;
-
-        if (bytes < unit) { return bytes + (si ? ' iB' : ' B'); }
-
-        var exp = Math.floor(Math.log(bytes) / Math.log(unit)),
-            pre = (si ? 'kMGTPE' : 'KMGTPE').charAt(exp - 1) + (si ? 'iB' : 'B');
-
-        return (bytes / Math.pow(unit, exp)).toFixed(1) + ' ' + pre;
-    }
-
-
     constructor(
         private _http: Http,
         private _apiEndpoint: string,
         private _md5Workers: Md5Workers,
         public file: any,
         public retries: number,
-        public parallel: number
+        public parallel: number,
+        public params: any,
     ) {
-        var self = this;
-        self.promise = new Promise((resolve, reject) => {
-            self._resolve = resolve;
-            self._reject = reject;
+        this.promise = new Promise((resolve, reject) => {
+            this._resolve = resolve;
+            this._reject = reject;
         });
-        self.totalBytes = self.file.size;
+        this.totalBytes = this.file.size;
 
-        if (self.file.name) {
-            self.filename = self.file.name;
+        if (this.file.name) {
+            this.filename = this.file.name;
         }
     }
 
-    resume(parallel?:number) {
-        var self = this;
+    public resume(parallel?: number) {
 
-        if (!self.uploading && !self.complete && !self.cancelled) {
-            self.uploading = true;
+        if (!this.uploading && !this.complete && !this.cancelled) {
+            this.uploading = true;
 
             if (parallel) {
-                self.parallel = parallel;
+                this.parallel = parallel;
             }
 
-            if (!self._initialised) {
+            if (!this._initialised) {
                 // We need to call new to get details on the upload target
-                self._api = new CondoApi(self._http, self._apiEndpoint, self);
-                self._api.init().subscribe(
+                this._api = new CondoApi(this._http, this._apiEndpoint, this);
+                this._api.init().subscribe(
                     (residence) => {
-                        self._initialise(residence);
+                        this._initialise(residence);
 
-                        if (self._initialised) {
-                            self._provider.start();
+                        if (this._initialised) {
+                            this._provider.start();
                         }
                     },
-                    err => self.notifyError(err)
+                    (err) => this.notifyError(err),
                 );
             } else {
-                self._provider.start();
+                this._provider.start();
             }
         }
     }
 
-    pause() {
+    public pause() {
         if (this.uploading) {
             this._provider.pause();
             this.uploading = false;
         }
     }
 
-    cancel() {
-        var self = this;
+    public cancel() {
 
-        if (!self.complete && !self.cancelled) {
-            self.pause();
+        if (!this.complete && !this.cancelled) {
+            this.pause();
 
             // Destroy the upload if it has started
-            if (self._initialised) {
-                self._provider.destroy();
-                self._initialised = false;
+            if (this._initialised) {
+                this._provider.destroy();
+                this._initialised = false;
             }
 
-            self.cancelled = true;
-            self.uploading = false;
-            self._reject(self);
+            this.cancelled = true;
+            this.uploading = false;
+            this._reject(this);
         }
     }
 
-    isWaiting() {
+    public isWaiting() {
         if (!this._initialised && !this.complete && !this.uploading && !this.cancelled) {
             return true;
         }
         return false;
     }
 
-    notifyError(err) {
-        var self = this;
+    public notifyError(err) {
 
-        console.error(err);
+        LIB_UTILS.error('Manager', 'Error:', err);
 
-        if (self._retries < self.retries) {
-            self._retries += 1;
+        if (this._retries < this.retries) {
+            this._retries += 1;
 
-            if (self._initialised) {
-                self._provider.start();
+            if (this._initialised) {
+                this._provider.start();
             } else {
-                self.uploading = false;
-                self.resume();
+                this.uploading = false;
+                this.resume();
             }
         } else {
-            self.pause();
-            self.error = err;
+            this.pause();
+            this.error = err;
         }
     }
 
 
     private _initialise(residence: string) {
-        var Provider = Upload.provider[residence];
+        const Provider = Upload.provider[residence];
 
         if (Provider) {
             this._provider = new Provider(this._api, this, this._md5Workers, this._resolve);
@@ -385,7 +153,7 @@ export class Upload {
         } else {
             // inform the user that this is not implemented
             this.error = `provider, ${residence}, not found`;
-            console.error(this.error);
+            LIB_UTILS.error('Manager', 'Error:', this.error);
 
             // The upload cannot be performed
             this.uploading = false;

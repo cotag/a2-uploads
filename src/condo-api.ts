@@ -1,11 +1,32 @@
 
-import {Observable} from 'rxjs/Rx';
-import {Http, Headers, URLSearchParams} from 'angular2/http';
+import { Headers, Http, URLSearchParams } from '@angular/http';
+import { Observable } from 'rxjs/Rx';
 
-import {Upload} from './upload';
+import { Upload } from './upload';
 
 
 export class CondoApi {
+
+    public static hexToBin(input: string) {
+        let result: string = '';
+
+        if ((input.length % 2) > 0) {
+            input = '0' + input;
+        }
+
+        for (let i = 0, length = input.length; i < length; i += 2) {
+            result += String.fromCharCode(parseInt(input.slice(i, i + 2), 16));
+        }
+
+        return result;
+    }
+
+    public static set token(token: string) {
+        CondoApi._token = token;
+    }
+
+    private static _token: string = '';
+
     public uploadId: string;
 
     private _params: any;
@@ -13,95 +34,91 @@ export class CondoApi {
     private _currentRequests = new Set<any>();
 
 
-    static hexToBin(input: string) {
-        var result = '',
-            i, length;
-
-        if ((input.length % 2) > 0) {
-            input = '0' + input;
-        }
-
-        for (i = 0, length = input.length; i < length; i += 2) {
-            result += String.fromCharCode(parseInt(input.slice(i, i + 2), 16));
-        }
-
-        return result;
-    }
-
-
     constructor(private _http: Http, private _apiEndpoint: string, private _upload: Upload) {
         // Clone the upload params
         this._params = Object.assign({}, this._upload.metadata);
     }
 
-
-    init() {
-        var self = this,
-            file = self._upload.file,
-            headers = new Headers(),
-            search = new URLSearchParams(),
-            req;
+    public init() {
+        const file = this._upload.file;
+        const headers = new Headers();
+        const search = new URLSearchParams();
+        let req: any;
 
         headers.append('Accept', 'application/json');
         headers.append('Content-Type', 'application/json');
+        if (CondoApi._token) {
+            headers.append('Authorization', `Bearer ${CondoApi._token}`);
+        }
 
-        self._params.file_size = file.size;
-        self._params.file_name = file.name;
+        this._params.file_size = file.size;
+        this._params.file_name = file.name;
 
         if (file.dir_path && file.dir_path.length > 0) {
-            self._params.file_path = file.dir_path;
+            this._params.file_path = file.dir_path;
+        }
+
+        if (this._upload && this._upload.params) {
+            for (const p in this._upload.params) {
+                if (this._upload.params.hasOwnProperty(p)) {
+                    this._params[p] = this._upload.params[p];
+                }
+            }
         }
 
         // Build the search params
-        self._setParams(search, self._params);
+        this._setParams(search, this._params);
 
         // Return the name of the storage provider (google, amazon, rackspace, etc)
-        req = self._http.get(`${ self._apiEndpoint }/new`, {
-            search: search,
-            headers: headers
+        req = this._http.get(`${this._apiEndpoint}/new`, {
+            search,
+            headers,
         }).map((res) => {
             // Make sure the API service is running
             // console.log(res.text());
             return res.json().residence;
         }).share();
 
-        self._monitorRequest(self, req);
+        this._monitorRequest(this, req);
 
         return req;
     }
 
 
     // Create a new upload
-    create(options:any = {}) {
-        var self = this,
-            headers = new Headers(),
-            req;
+    public create(options: any = {}) {
+        const headers = new Headers();
+        let req: any;
 
         headers.append('Accept', 'application/json');
         headers.append('Content-Type', 'application/json');
 
+        if (CondoApi._token) {
+            headers.append('Authorization', `Bearer ${CondoApi._token}`);
+        }
+
         if (options.file_id) {
-            self._params.file_id = options.file_id;
+            this._params.file_id = options.file_id;
         }
 
         // We may be requesting the next set of parts
         // TODO:: review this
         if (options.parameters) {
-            self._params.parameters = options.parameters;
+            this._params.parameters = options.parameters;
         }
 
-        req = self._http.post(self._apiEndpoint, JSON.stringify(self._params), {
-            headers: headers
-        }).map(function(res) {
-            var result = res.json();
+        req = this._http.post(this._apiEndpoint, JSON.stringify(this._params), {
+            headers,
+        }).map((res) => {
+            const result = res.json();
 
             // Extract the upload id from the results
-            self._uploadId = result.upload_id;
+            this._uploadId = result.upload_id;
 
             return result;
         }).share();
 
-        self._monitorRequest(self, req);
+        this._monitorRequest(this, req);
 
         return req;
     }
@@ -109,14 +126,13 @@ export class CondoApi {
 
     // This requests a chunk signature
     //    Only used for resumable / parallel uploads
-    nextChunk(partNum: number, partId: string, parts: Array<number>, partData: any = null) {
-        var self = this,
-            search = new URLSearchParams(),
-            headers = new Headers(),
-            body: any = {
-                part_list: parts
-            },
-            req;
+    public nextChunk(partNum: number, partId: string, parts: number[], partData: any = null) {
+        const search = new URLSearchParams();
+        const headers = new Headers();
+        const body: any = {
+            part_list: parts,
+        };
+        let req: any;
 
         if (partData) {
             body.part_data = partData;
@@ -124,43 +140,50 @@ export class CondoApi {
 
         headers.append('Accept', 'application/json');
         headers.append('Content-Type', 'application/json');
-        self._setParams(search, {
+        if (CondoApi._token) {
+            headers.append('Authorization', `Bearer ${CondoApi._token}`);
+        }
+
+        this._setParams(search, {
             part: partNum,
-            file_id: partId
+            file_id: partId,
         });
 
-        req = self._http.put(`${self._apiEndpoint}/${encodeURIComponent(self._uploadId)}`,
+        req = this._http.put(`${this._apiEndpoint}/${encodeURIComponent(this._uploadId)}`,
             JSON.stringify(body),
             {
-                search: search,
-                headers: headers
-            }
+                search,
+                headers,
+            },
         ).map(res => res.json()).share();
 
-        self._monitorRequest(self, req);
+        this._monitorRequest(this, req);
 
         return req;
     }
 
 
     // provides a query request for some providers if required
-    sign(part_number:any, part_id:string = null) {
-        var self = this,
-            search = new URLSearchParams(),
-            headers = new Headers(),
-            req;
+    public sign(part_number: any, part_id: string = null) {
+        const search = new URLSearchParams();
+        const headers = new Headers();
+        let req: any;
 
         headers.append('Accept', 'application/json');
+        if (CondoApi._token) {
+            headers.append('Authorization', `Bearer ${CondoApi._token}`);
+        }
+
         search.set('part', part_number.toString());
         if (part_id) {
             search.set('file_id', encodeURIComponent(part_id));
         }
 
-        req = self._http.get(`${ self._apiEndpoint }/${ encodeURIComponent(self._uploadId) }/edit`, {
-            search: search
-        }).map(res => res.json()).share();
+        req = this._http.get(`${this._apiEndpoint}/${encodeURIComponent(this._uploadId)}/edit`, {
+            search,
+        }).map((res) => res.json()).share();
 
-        self._monitorRequest(self, req);
+        this._monitorRequest(this, req);
 
         return req;
     }
@@ -168,16 +191,18 @@ export class CondoApi {
 
     // Either updates the status of an upload (which parts are complete)
     // Or is used to indicate that an upload is complete
-    update(params:any = {}) {
-        var self = this,
-            headers = new Headers(),
-            req;
+    public update(params: any = {}) {
+        const headers = new Headers();
+        let req: any;
 
         headers.append('Content-Type', 'application/json');
         headers.append('Accept', 'application/json');
+        if (CondoApi._token) {
+            headers.append('Authorization', `Bearer ${CondoApi._token}`);
+        }
 
-        req = self._http.put(`${self._apiEndpoint}/${encodeURIComponent(self._uploadId)}`, JSON.stringify(params), {
-            headers: headers
+        req = this._http.put(`${this._apiEndpoint}/${encodeURIComponent(this._uploadId)}`, JSON.stringify(params), {
+            headers,
         }).map((res) => {
             // NOTE:: This used to check content length however
             // See: https://github.com/angular/angular/pull/7250
@@ -188,14 +213,14 @@ export class CondoApi {
             }
         }).share();
 
-        self._monitorRequest(self, req);
+        this._monitorRequest(this, req);
 
         return req;
     }
 
 
     // Abort any existing requests
-    abort() {
+    public abort() {
         this._currentRequests.forEach((req) => {
             req.dispose();
         });
@@ -205,28 +230,30 @@ export class CondoApi {
 
 
     // Destroy an upload
-    destroy() {
-        var self = this;
+    public destroy() {
+        this.abort();
+        const headers = new Headers();
 
-        self.abort();
-        if (self._uploadId) {
-            self._http.delete(`${ self._apiEndpoint }/${ encodeURIComponent(self._uploadId) }`);
+        if (CondoApi._token) {
+            headers.append('Authorization', `Bearer ${CondoApi._token}`);
+        }
+        if (this._uploadId) {
+            this._http.delete(`${this._apiEndpoint}/${encodeURIComponent(this._uploadId)}`, { headers });
         }
     }
 
 
     // Executes the signed request against the cloud provider
     // Not very testable however it's the best we can achieve given the tools
-    signedRequest(opts:any, monitor: boolean = false) {
-        var self = this,
-            response: any = {},
-            promise: any,
-            dispose: () => void;
+    public signedRequest(opts: any, monitor: boolean = false) {
+        const response: any = {};
+        let promise: any;
+        let  dispose: () => void;
 
         promise = new Promise((resolve, reject) => {
-            var i: string,
-                xhr = new XMLHttpRequest(),
-                observable;
+            let i: string;
+            const xhr = new XMLHttpRequest();
+            let observable: any;
 
             if (monitor) {
                 response.progress = new Observable<{ loaded: number, total: number }>((obs) => {
@@ -240,13 +267,13 @@ export class CondoApi {
                 if (evt.lengthComputable && observable) {
                     observable.next({
                         loaded: evt.loaded,
-                        total: evt.total
+                        total: evt.total,
                     });
                 }
             });
 
             xhr.addEventListener('load', (evt: any) => {
-                self._currentRequests.delete(promise);
+                this._currentRequests.delete(promise);
 
                 // We are looking for a success response unless there is an expected response
                 if ((xhr.status >= 200 && xhr.status < 300) ||
@@ -256,30 +283,32 @@ export class CondoApi {
                     reject(`${xhr.status}: ${xhr.statusText}`);
                 }
             });
-            xhr.addEventListener('error', evt => {
-                self._currentRequests.delete(promise);
+            xhr.addEventListener('error', (evt) => {
+                this._currentRequests.delete(promise);
                 reject(`${xhr.status}: ${xhr.statusText || 'unknown error'}`);
             });
-            xhr.addEventListener('abort', evt => {
-                self._currentRequests.delete(promise);
+            xhr.addEventListener('abort', (evt) => {
+                this._currentRequests.delete(promise);
                 reject(xhr.statusText || 'browser aborted');
             });
 
             xhr.open(
                 opts.signature.verb,
                 opts.signature.url,
-                true // async
+                true, // async
             );
 
             // Set the headers
             for (i in opts.signature.headers) {
-                xhr.setRequestHeader(i, opts.signature.headers[i]);
+                if (opts.signature.headers.hasOwnProperty(i)) {
+                    xhr.setRequestHeader(i, opts.signature.headers[i]);
+                }
             }
 
             // Allow the request to be cancelled (quack!)
-            dispose = function() {
+            dispose = () => {
                 xhr.abort();
-                self._currentRequests.delete(promise);
+                this._currentRequests.delete(promise);
                 reject('user aborted');
             };
 
@@ -288,25 +317,25 @@ export class CondoApi {
 
         // Hook up the request monitoring
         promise.dispose = dispose;
-        self._currentRequests.add(promise);
+        this._currentRequests.add(promise);
 
         response.request = promise;
         return response;
     }
 
 
-    private _monitorRequest(self, req) {
-        self._currentRequests.add(req);
+    private _monitorRequest(self: any, req: any) {
+        this._currentRequests.add(req);
         req.subscribe(null, null, () => {
-            self._currentRequests.delete(req);
+            this._currentRequests.delete(req);
         });
     }
 
     private _setParams(search: URLSearchParams, params: any) {
-        var key: string;
-
-        for (key in params) {
-            search.set(key, encodeURIComponent(params[key]));
+        for (const key in params) {
+            if (params.hasOwnProperty(key)) {
+                search.set(key, encodeURIComponent(params[key]));
+            }
         }
     }
 }

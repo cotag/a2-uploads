@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "target": "es5",
+    "module": "es2015",
+    "moduleResolution": "node",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "sourceMap": true,
+    "pretty": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitUseStrict": false,
+    "noFallthroughCasesInSwitch": true,
+    "outDir": "./_build/compiled",
+    "lib": [
+        "dom",
+        "es6"
+    ],
+    "types": [
+        "hammerjs",
+        "jasmine",
+        "node",
+        "protractor",
+        "selenium-webdriver",
+        "source-map",
+        "uglify-js",
+        "webpack"
+    ]
+  },
+  "files": [
+      "index.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src",
+    "_build/main.aot.browser.ts",
+    "_build/polyfills.aot.browser.ts"
+  ],
+  "angularCompilerOptions": {
+    "genDir": "./_build/compiled",
+    "debug": true
+ }
+}

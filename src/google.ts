@@ -1,138 +1,129 @@
 
-import {CondoApi} from './condo-api';
-import {Upload, State, CloudStorage} from './upload';
-import {Md5Workers} from './md5-workers';
+import { CloudStorage, State } from './cloud-storage';
+import { CondoApi } from './condo-api';
+import { Md5Workers } from './md5-workers';
+import { Upload } from './upload';
 
 
 export class Google extends CloudStorage {
-    static lookup: string = 'GoogleCloudStorage';
-
+    public static lookup: string = 'GoogleCloudStorage';
 
     constructor(api: CondoApi, upload: Upload, workers: Md5Workers, completeCB: any) {
         super(api, upload, workers, completeCB);
     }
 
-
     protected _start() {
-        var self = this;
-
-        if (self._strategy === undefined || self.state === State.Paused) {
-            self.state = State.Uploading;
+        if (this._strategy === undefined || this.state === State.Paused) {
+            this.state = State.Uploading;
 
             // Prevents this function being called twice
-            self._strategy = null;
+            this._strategy = null;
 
-            self._processPart(self._file).then((result) => {
-                if (self.state !== State.Uploading) {
+            this._processPart(this._file).then((result) => {
+                if (this.state !== State.Uploading) {
                     // upload was paused or aborted as we were reading the file
                     return;
                 }
 
-                self._api.create({ file_id: result.md5 })
+                this._api.create({ file_id: result.md5 })
                     .subscribe((response) => {
-                        self._strategy = response.type;
+                        this._strategy = response.type;
                         if (response.type === 'direct_upload') {
-                            self._direct(response, result);
+                            this._direct(response, result);
                         } else {
-                            self._resume(response, result);
+                            this._resume(response, result);
                         }
-                    }, self._defaultError.bind(self));
-            }, self._defaultError.bind(self));
+                    }, this._defaultError.bind(this));
+            }, this._defaultError.bind(this));
         }
     }
 
 
     // Calculates the MD5 of the part of the file we are uploading
     private _processPart(chunk: Blob, part: number = 0) {
-        var self = this;
-
-        return self._hashData(part.toString(), () => {
+        return this._hashData(part.toString(), () => {
             return chunk;
         }, (data) => {
             // We hash in here as not all cloud providers may use MD5
-            var hasher = self._md5Workers.next();
+            const hasher = this._md5Workers.next();
 
             // Hash the part and return the result
             return hasher.hash(data).then((md5: string) => {
                 return {
                     md5: window.btoa(CondoApi.hexToBin(md5)),
-                    part: part
+                    part
                 };
             });
         });
     }
 
     private _resume(request, firstChunk) {
-        var self = this;
-
-        self._api.signedRequest(request).request
+        this._api.signedRequest(request).request
             .then((xhr) => {
                 if (request.type === 'status') {
                     if (xhr.status === request.expected) {
                         // We need to resume the upload
-                        var rangeStart: number = parseInt(xhr.getResponseHeader('Range').split('-')[1], 10) + 1;
-                        self._processPart(self._file.slice(rangeStart), rangeStart).then((partInfo) => {
-                            if (self.state !== State.Uploading) {
+                        const rangeStart: number = parseInt(xhr.getResponseHeader('Range').split('-')[1], 10) + 1;
+                        this._processPart(this._file.slice(rangeStart), rangeStart).then((partInfo) => {
+                            if (this.state !== State.Uploading) {
                                 // upload was paused or aborted as we were reading the file
                                 return;
                             }
 
-                            self._api.sign(rangeStart, partInfo.md5).
+                            this._api.sign(rangeStart, partInfo.md5).
                                 subscribe((data) => {
-                                    self._performUpload(data, partInfo, rangeStart);
-                                }, self._defaultError.bind(self));
-                        }, self._defaultError.bind(self));
+                                    this._performUpload(data, partInfo, rangeStart);
+                                }, this._defaultError.bind(this));
+                        }, this._defaultError.bind(this));
                     } else {
                         // The upload is complete
-                        self._completeUpload();
+                        this._completeUpload();
                     }
                 } else {
                     // We've created the upload - we need to inform our server
-                    self._api.update({
+                    this._api.update({
                         // grab the upload_id from the Location header
-                        resumable_id: self._getQueryParams(xhr.getResponseHeader('Location').split('?')[1]).upload_id,
+                        resumable_id: this._getQueryParams(xhr.getResponseHeader('Location').split('?')[1]).upload_id,
                         file_id: firstChunk.md5,
                         part: 0
                     }).subscribe((data) => {
-                        self._performUpload(data, firstChunk, 0);
+                        this._performUpload(data, firstChunk, 0);
                     }, function(reason) {
                         // We should start from the beginning
-                        self._restart();
-                        self._defaultError(reason);
+                        this._restart();
+                        this._defaultError(reason);
                     });
                 }
-            }, self._defaultError.bind(self));
+            }, this._defaultError.bind(this));
     }
 
 
     private _performUpload(request, partInfo, rangeStart) {
-        var self = this,
-            monitor = self._requestWithProgress(partInfo, request);
+        const monitor = this._requestWithProgress(partInfo, request);
 
         monitor.then(() => {
-            self._completeUpload();
-        }, self._defaultError.bind(self));
+            this._completeUpload();
+        }, this._defaultError.bind(this));
     }
 
 
     private _direct(request, partInfo) {
-        var self = this,
-            monitor = self._requestWithProgress(partInfo, request);
+        const monitor = this._requestWithProgress(partInfo, request);
 
-        self._isDirectUpload = true;
+        this._isDirectUpload = true;
 
         monitor.then(() => {
-            self._completeUpload();
-        }, self._defaultError.bind(self));
+            this._completeUpload();
+        }, this._defaultError.bind(this));
     }
 
 
     private _getQueryParams(qs) {
         qs = qs.split('+').join(' ');
 
-        var params: any = {},
-            tokens,
-            re = /[?&]?([^=]+)=([^&]*)/g;
+        const params: any = {};
+        let tokens: any;
+        const re = /[?&]?([^=]+)=([^&]*)/g;
 
         // NOTE:: assignment in while loop is deliberate
         while (tokens = re.exec(qs)) {
