@@ -1,5 +1,5 @@
 {
-  "name": "@aca-1/a2-uploads",
+  "name": "@acaprojects/a2-uploads",
   "version": "1.0.1",
   "description": "Angular 2 Interface for direct to cloud uploads",
   "main": "index.js",
